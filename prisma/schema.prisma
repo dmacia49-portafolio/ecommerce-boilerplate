@@ -1,0 +1,663 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// AUTHENTICATION
+// Better Auth core schema + application fields
+// ============================================================
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
+  image            String?
+  role             String   @default("CUSTOMER")
+  twoFactorEnabled Boolean? @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions   Session[]
+  accounts   Account[]
+  twoFactors TwoFactor[]
+  passkeys   Passkey[]
+
+  addresses Address[]
+  carts     Cart[]
+  orders    Order[]
+  auditLogs AuditLog[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id         String @id @default(uuid())
+  accountId  String
+  providerId String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ============================================================
+// MFA / TWO-FACTOR AUTHENTICATION
+// ============================================================
+
+model TwoFactor {
+  id          String @id @default(uuid())
+  secret      String
+  backupCodes String
+
+  verified                Boolean   @default(false)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+// ============================================================
+// PASSKEY / WEBAUTHN
+// ============================================================
+
+model Passkey {
+  id           String  @id @default(uuid())
+  name         String?
+  publicKey    String
+  credentialID String  @unique
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  aaguid       String?
+
+  createdAt DateTime? @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkey")
+}
+
+// ============================================================
+// CUSTOMER ADDRESSES
+// ============================================================
+
+enum AddressType {
+  SHIPPING
+  BILLING
+  BOTH
+}
+
+model Address {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type AddressType @default(BOTH)
+
+  firstName String
+  lastName  String
+
+  address1 String
+  address2 String?
+
+  city       String
+  state      String
+  postalCode String
+  country    String
+
+  phone String?
+
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Product {
+  id String @id @default(uuid())
+
+  name        String
+  slug        String  @unique
+  description String?
+
+  brand  String?
+  status ProductStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants   ProductVariant[]
+  images     ProductImage[]
+  categories ProductCategory[]
+  orderItems OrderItem[]
+
+  @@index([status])
+  @@map("products")
+}
+
+// ============================================================
+// PRODUCT VARIANTS
+// ============================================================
+
+model ProductVariant {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name String
+  sku  String @unique
+
+  price          Decimal  @db.Decimal(12, 2)
+  compareAtPrice Decimal? @db.Decimal(12, 2)
+
+  currency String @default("USD") @db.VarChar(3)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory Inventory?
+
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  reservations InventoryReservation[]
+
+  @@index([productId])
+  @@index([isActive])
+  @@map("product_variants")
+}
+
+// ============================================================
+// PRODUCT IMAGES
+// ============================================================
+
+model ProductImage {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  url       String
+  altText   String?
+  sortOrder Int     @default(0)
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+
+model Category {
+  id String @id @default(uuid())
+
+  name        String
+  slug        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  parentId String?
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+
+  products ProductCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([isActive])
+  @@map("categories")
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+  @@map("product_categories")
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+
+model Inventory {
+  id String @id @default(uuid())
+
+  variantId String         @unique
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  quantityAvailable Int @default(0)
+  quantityReserved  Int @default(0)
+  reorderLevel      Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory")
+}
+
+// ============================================================
+// INVENTORY RESERVATIONS
+// Inventory is reserved only when checkout begins.
+// ============================================================
+
+enum InventoryReservationStatus {
+  ACTIVE
+  COMPLETED
+  RELEASED
+  EXPIRED
+}
+
+model InventoryReservation {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  quantity Int
+
+  status InventoryReservationStatus @default(ACTIVE)
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, variantId])
+  @@index([orderId])
+  @@index([variantId])
+  @@index([status])
+  @@index([status, expiresAt])
+  @@map("inventory_reservations")
+}
+
+// ============================================================
+// SHOPPING CART
+// ============================================================
+
+enum CartStatus {
+  ACTIVE
+  CONVERTED
+  ABANDONED
+  EXPIRED
+}
+
+model Cart {
+  id String @id @default(uuid())
+
+  // Opaque random token stored in the anonymous cart cookie.
+  // Do not expose the internal database ID in the browser cookie.
+  cartToken String @unique @default(uuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  status CartStatus @default(ACTIVE)
+
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id String @id @default(uuid())
+
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  quantity Int
+
+  // Informational snapshot only.
+  // Price must be validated again on the server at checkout.
+  unitPriceSnapshot Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, variantId])
+  @@index([variantId])
+  @@map("cart_items")
+}
+
+// ============================================================
+// ORDERS
+// ============================================================
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PROCESSING
+  PARTIALLY_FULFILLED
+  FULFILLED
+  RETURNED
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  orderNumber String @unique
+
+  checkoutToken String @unique @default(uuid())
+
+  // Nullable to support guest checkout and retain historical
+  // orders if a customer's account is deleted.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  customerEmail String
+
+  status            OrderStatus        @default(PENDING)
+  paymentStatus     OrderPaymentStatus @default(PENDING)
+  fulfillmentStatus FulfillmentStatus  @default(UNFULFILLED)
+
+  currency String @default("USD") @db.VarChar(3)
+
+  subtotal      Decimal @db.Decimal(12, 2)
+  discountTotal Decimal @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(12, 2)
+  shippingTotal Decimal @default(0) @db.Decimal(12, 2)
+  grandTotal    Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items        OrderItem[]
+  addresses    OrderAddress[]
+  payments     Payment[]
+  reservations InventoryReservation[]
+
+  @@index([userId])
+  @@index([customerEmail])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ============================================================
+// ORDER ITEMS
+// ============================================================
+
+model OrderItem {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Historical relations are nullable so an archived/deleted
+  // catalog record does not destroy old order information.
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // Historical snapshot
+  productName String
+  variantName String?
+  sku         String
+
+  quantity Int
+
+  unitPrice Decimal @db.Decimal(12, 2)
+  total     Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("order_items")
+}
+
+// ============================================================
+// ORDER ADDRESS SNAPSHOTS
+// ============================================================
+
+enum OrderAddressType {
+  SHIPPING
+  BILLING
+}
+
+model OrderAddress {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type OrderAddressType
+
+  firstName String
+  lastName  String
+
+  address1 String
+  address2 String?
+
+  city       String
+  state      String
+  postalCode String
+  country    String
+
+  phone String?
+
+  @@unique([orderId, type])
+  @@map("order_addresses")
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  SQUARE
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+}
+
+model Payment {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  provider PaymentProvider
+
+  providerPaymentId String? @unique
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @db.VarChar(3)
+
+  status PaymentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events PaymentEvent[]
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ============================================================
+// PAYMENT WEBHOOK EVENTS
+// ============================================================
+
+model PaymentEvent {
+  id String @id @default(uuid())
+
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  provider PaymentProvider
+
+  // Used for webhook idempotency.
+  // The same provider event must never be processed twice.
+  providerEventId String @unique
+
+  eventType String
+
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+
+  // Do not store raw card credentials or sensitive payment data.
+  payloadReference String?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([processed])
+  @@index([createdAt])
+  @@map("payment_events")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action     String
+  entityType String
+  entityId   String?
+
+  metadata  Json?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

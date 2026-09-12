@@ -1,0 +1,9 @@
+export const CHECKOUT_RESERVATION_MINUTES = 30;
+
+export const CHECKOUT_TRANSACTION_RETRIES = 3;
+
+export const CHECKOUT_COOKIE_NAME =
+    "ecommerce_checkout";
+
+export const CHECKOUT_COOKIE_MAX_AGE_SECONDS =
+    CHECKOUT_RESERVATION_MINUTES * 60;
