@@ -169,3 +169,116 @@ export async function markReservationReleased(
 
     return result.count === 1;
 }
+
+export async function findActiveReservationsForOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+) {
+    return tx.inventoryReservation.findMany({
+        where: {
+            orderId,
+
+            status:
+                InventoryReservationStatus.ACTIVE,
+        },
+
+        select: {
+            id: true,
+            orderId: true,
+            variantId: true,
+            quantity: true,
+        },
+    });
+}
+
+export async function finalizeReservedInventory(
+    tx: Prisma.TransactionClient,
+    variantId: string,
+    quantity: number,
+) {
+    const affectedRows = await tx.$executeRaw`
+        UPDATE "inventory"
+        SET
+            "quantityAvailable" =
+                "quantityAvailable" - ${quantity},
+
+            "quantityReserved" =
+                "quantityReserved" - ${quantity},
+
+            "updatedAt" =
+                CURRENT_TIMESTAMP
+
+        WHERE
+            "variantId" = ${variantId}
+
+            AND "quantityAvailable" >= ${quantity}
+
+            AND "quantityReserved" >= ${quantity}
+    `;
+
+    return affectedRows === 1;
+}
+
+export async function markReservationCompleted(
+    tx: Prisma.TransactionClient,
+    reservationId: string,
+) {
+    const result =
+        await tx.inventoryReservation.updateMany({
+            where: {
+                id: reservationId,
+
+                status:
+                    InventoryReservationStatus.ACTIVE,
+            },
+
+            data: {
+                status:
+                    InventoryReservationStatus.COMPLETED,
+            },
+        });
+
+    return result.count === 1;
+}
+
+export async function markOrderPaymentProcessing(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+) {
+    const result =
+        await tx.order.updateMany({
+            where: {
+                id: orderId,
+
+                status:
+                    OrderStatus.PENDING,
+
+                paymentStatus:
+                    OrderPaymentStatus.PENDING,
+            },
+
+            data: {
+                status:
+                    OrderStatus.PROCESSING,
+            },
+        });
+
+    return result.count === 1;
+}
+
+export async function findOrderReservationState(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+) {
+    return tx.order.findUnique({
+        where: {
+            id: orderId,
+        },
+
+        select: {
+            id: true,
+            status: true,
+            paymentStatus: true,
+        },
+    });
+}

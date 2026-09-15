@@ -7,7 +7,6 @@ export type PaymentMethod =
     | "VENMO";
 
 export type PaymentProvider =
-    | "BRAINTREE"
     | "STRIPE"
     | "PAYPAL"
     | "SQUARE";
@@ -16,12 +15,16 @@ export type PaymentRequest = {
     orderId: string;
     orderNumber: string;
 
-    amount: number;
+    amountCents: number;
     currency: string;
 
     customerEmail: string;
 
     method: PaymentMethod;
+
+    sourceToken: string;
+
+    idempotencyKey: string;
 };
 
 export type PaymentResult = {
@@ -35,6 +38,4 @@ export type PaymentResult = {
     | "PROCESSING"
     | "SUCCEEDED"
     | "FAILED";
-
-    redirectUrl?: string;
 };

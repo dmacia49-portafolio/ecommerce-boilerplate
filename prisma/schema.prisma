@@ -570,6 +570,15 @@ enum PaymentProvider {
   SQUARE
 }
 
+enum PaymentMethod {
+  ACH
+  CARD
+  GOOGLE_PAY
+  APPLE_PAY
+  PAYPAL
+  VENMO
+}
+
 enum PaymentStatus {
   PENDING
   PROCESSING
@@ -587,8 +596,11 @@ model Payment {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   provider PaymentProvider
+  method   PaymentMethod
 
   providerPaymentId String? @unique
+
+  idempotencyKey String @unique
 
   amount   Decimal @db.Decimal(12, 2)
   currency String  @db.VarChar(3)
@@ -602,6 +614,8 @@ model Payment {
 
   @@index([orderId])
   @@index([status])
+  @@index([provider])
+  @@index([method])
   @@map("payments")
 }
 

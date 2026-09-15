@@ -14,12 +14,12 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "braintree": "^3.39.0",
     "dotenv": "^17.4.2",
     "next": "16.3.5",
     "pg": "^8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "square": "^45.1.0",
     "zod": "^4.6.2"
   },
   "devDependencies": {
@@ -36,5 +36,9 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"
+  },
+  "overrides": {
+    "mysql2": "3.23.1",
+    "deepmerge-ts": "8.0.2"
   }
 }

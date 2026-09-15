@@ -99,7 +99,7 @@ export function AddToCartForm({ variants }: AddToCartFormProps) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-950 px-5 py-3 font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+        className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-950 px-5 py-3 font-medium text-white transition enabled:cursor-pointer enabled:hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-zinc-950 dark:enabled:hover:bg-zinc-200"
       >
         {pending ? "Adding..." : "Add to cart"}
       </button>

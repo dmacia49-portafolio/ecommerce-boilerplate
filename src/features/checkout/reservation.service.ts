@@ -8,7 +8,19 @@ import {
     releaseReservedInventory,
     findPendingCheckoutForCancellation,
     markReservationReleased,
+    findActiveReservationsForOrder,
+    findOrderReservationState,
+    finalizeReservedInventory,
+    markOrderPaymentProcessing,
+    markReservationCompleted,
 } from "./reservation.repository";
+
+
+import {
+    OrderPaymentStatus,
+    OrderStatus,
+    Prisma,
+} from "@/generated/prisma/client";
 
 const DEFAULT_BATCH_SIZE = 100;
 
@@ -203,6 +215,125 @@ export async function cancelAnonymousCheckout(
                 orderNumber:
                     order.orderNumber,
             };
+        },
+    );
+}
+export async function finalizeOrderReservationsAfterPaymentAccepted(
+    orderId: string,
+) {
+    return prisma.$transaction(
+        async (tx) => {
+            const order =
+                await findOrderReservationState(
+                    tx,
+                    orderId,
+                );
+
+            if (!order) {
+                throw new Error(
+                    "Order was not found.",
+                );
+            }
+
+            /*
+             * Idempotency:
+             *
+             * If Square's request is retried after we already
+             * committed the inventory, do not subtract inventory
+             * a second time.
+             */
+            if (
+                order.status ===
+                OrderStatus.PROCESSING &&
+                order.paymentStatus ===
+                OrderPaymentStatus.PENDING
+            ) {
+                return {
+                    finalized: false,
+                    alreadyFinalized: true,
+                    reservationCount: 0,
+                };
+            }
+
+            if (
+                order.status !==
+                OrderStatus.PENDING ||
+                order.paymentStatus !==
+                OrderPaymentStatus.PENDING
+            ) {
+                throw new Error(
+                    "Order is not in a state that can be finalized.",
+                );
+            }
+
+            const reservations =
+                await findActiveReservationsForOrder(
+                    tx,
+                    orderId,
+                );
+
+            if (reservations.length === 0) {
+                throw new Error(
+                    "The order no longer has active inventory reservations.",
+                );
+            }
+
+            for (const reservation of reservations) {
+                /*
+                 * Claim ACTIVE -> COMPLETED first.
+                 *
+                 * This prevents the expiration worker from
+                 * releasing the same reservation concurrently.
+                 */
+                const completed =
+                    await markReservationCompleted(
+                        tx,
+                        reservation.id,
+                    );
+
+                if (!completed) {
+                    throw new Error(
+                        `Unable to complete reservation ${reservation.id}.`,
+                    );
+                }
+
+                const inventoryFinalized =
+                    await finalizeReservedInventory(
+                        tx,
+                        reservation.variantId,
+                        reservation.quantity,
+                    );
+
+                if (!inventoryFinalized) {
+                    throw new Error(
+                        `Unable to finalize inventory for reservation ${reservation.id}.`,
+                    );
+                }
+            }
+
+            const orderUpdated =
+                await markOrderPaymentProcessing(
+                    tx,
+                    orderId,
+                );
+
+            if (!orderUpdated) {
+                throw new Error(
+                    "Unable to move the order into processing.",
+                );
+            }
+
+            return {
+                finalized: true,
+                alreadyFinalized: false,
+                reservationCount:
+                    reservations.length,
+            };
+        },
+        {
+            isolationLevel:
+                Prisma.TransactionIsolationLevel
+                    .Serializable,
         },
     );
 }

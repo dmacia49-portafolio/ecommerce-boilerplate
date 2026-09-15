@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { cancelCheckoutAction } from "@/features/checkout/checkout.actions";
 import { getCheckoutOrderSummary } from "@/features/checkout/checkout.service";
 
-import { cancelCheckoutAction } from "@/features/checkout/checkout.actions";
+import { PaymentMethodSelector } from "@/features/payments/components/PaymentMethodSelector";
 
 type CheckoutOrderPageProps = {
   params: Promise<{
@@ -28,6 +29,8 @@ export default async function CheckoutOrderPage({
   if (!order) {
     notFound();
   }
+
+  const achAvailable = order.currency === "USD";
 
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-16 dark:bg-zinc-950">
@@ -93,16 +96,21 @@ export default async function CheckoutOrderPage({
             <span>{formatPrice(order.grandTotal, order.currency)}</span>
           </div>
 
-          <div className="mt-8 rounded-xl border border-dashed border-zinc-300 p-5 text-center dark:border-zinc-700">
-            <p className="font-medium text-zinc-950 dark:text-white">
-              Stripe payment comes next
-            </p>
-
-            <p className="mt-2 text-sm text-zinc-500">
-              For now this page confirms that PostgreSQL successfully reserved
-              the inventory.
-            </p>
+          <div className="mt-8">
+            {achAvailable ? (
+              <PaymentMethodSelector
+                orderNumber={order.orderNumber}
+                amount={order.grandTotal.toFixed(2)}
+              />
+            ) : (
+              <div className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  ACH Direct Debit is currently available only for USD orders.
+                </p>
+              </div>
+            )}
           </div>
+
           <form action={cancelCheckoutAction} className="mt-6">
             <button
               type="submit"
